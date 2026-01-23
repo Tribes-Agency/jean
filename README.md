@@ -7,6 +7,7 @@ Jean (Claude haha) is an AI assistant application that helps you to manage multi
 - Load context from sessions, GitHub Issues / Pull requests
 - Automated (magic) Git commands / prompts (review, commit, open PR, investigate issue/pr)
 - Automated GitHub PR or local merge worktrees
+- Automated merge conflict resolver
 - Archive worktrees / branches so you can restore them and continue to work
 - A lot more
 
