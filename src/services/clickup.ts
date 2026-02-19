@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { invoke } from '@/lib/transport'
 import { logger } from '@/lib/logger'
 import type {
+  ClickUpAuthenticatedUser,
   ClickUpAuthStatus,
   ClickUpWorkspace,
   ClickUpSpace,
@@ -37,6 +38,14 @@ export const clickupQueryKeys = {
   task: (taskId: string) => [...clickupQueryKeys.all, 'task', taskId] as const,
   loadedContexts: (sessionId: string) =>
     [...clickupQueryKeys.all, 'loaded-contexts', sessionId] as const,
+  user: () => [...clickupQueryKeys.all, 'user'] as const,
+  myTasks: (workspaceId: string, includeClosed: boolean) =>
+    [
+      ...clickupQueryKeys.all,
+      'myTasks',
+      workspaceId,
+      includeClosed,
+    ] as const,
 }
 
 /**
@@ -65,6 +74,66 @@ export function useClickUpAuth(options?: { enabled?: boolean }) {
     enabled: options?.enabled ?? true,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10,
+  })
+}
+
+/**
+ * Hook to get the authenticated ClickUp user profile.
+ * Cached indefinitely since user data doesn't change during a session.
+ */
+export function useClickUpUser(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: clickupQueryKeys.user(),
+    queryFn: async (): Promise<ClickUpAuthenticatedUser> => {
+      if (!isTauri()) {
+        throw new Error('Not running in Tauri')
+      }
+
+      logger.debug('Fetching authenticated ClickUp user')
+      const user = await invoke<ClickUpAuthenticatedUser>('clickup_get_user')
+      logger.info('ClickUp user loaded', {
+        id: user.id,
+        username: user.username,
+      })
+      return user
+    },
+    enabled: options?.enabled ?? true,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 1,
+  })
+}
+
+/**
+ * Hook to get tasks assigned to the authenticated user across a workspace.
+ */
+export function useClickUpMyTasks(
+  workspaceId: string | null,
+  includeClosed = false,
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: clickupQueryKeys.myTasks(workspaceId ?? '', includeClosed),
+    queryFn: async (): Promise<ClickUpTaskListResult> => {
+      if (!isTauri() || !workspaceId) {
+        return { tasks: [], lastPage: true }
+      }
+
+      logger.debug('Fetching ClickUp my tasks', { workspaceId, includeClosed })
+      const result = await invoke<ClickUpTaskListResult>(
+        'clickup_get_my_tasks',
+        { workspaceId, includeClosed }
+      )
+      logger.info('ClickUp my tasks loaded', {
+        count: result.tasks.length,
+        lastPage: result.lastPage,
+      })
+      return result
+    },
+    enabled: (options?.enabled ?? true) && !!workspaceId,
+    staleTime: 1000 * 60 * 2, // 2 minutes
+    gcTime: 1000 * 60 * 10,
+    retry: 1,
   })
 }
 
@@ -191,7 +260,7 @@ export function useClickUpListTasks(
         logger.debug('Fetching ClickUp list tasks', { listId, includeClosed })
         const result = await invoke<ClickUpTaskListResult>(
           'clickup_list_tasks_in_list',
-          { listId, includeClosed, page: 0 }
+          { listId, includeClosed, page: 0, subtasks: true }
         )
         logger.info('ClickUp list tasks loaded', {
           listId,

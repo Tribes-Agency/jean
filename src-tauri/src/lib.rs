@@ -2185,6 +2185,8 @@ pub fn run() {
             clickup::commands::clickup_check_auth,
             clickup::commands::clickup_logout,
             clickup::auth::clickup_start_oauth,
+            clickup::commands::clickup_get_user,
+            clickup::commands::clickup_get_my_tasks,
             clickup::commands::clickup_list_workspaces,
             clickup::commands::clickup_list_spaces,
             clickup::commands::clickup_list_tasks,

@@ -97,6 +97,34 @@ async fn check_response(response: Response) -> Result<Response, ClickUpApiError>
     Ok(response)
 }
 
+/// Get the authenticated user's profile.
+/// ClickUp API: GET /user
+pub async fn get_authorized_user() -> Result<ClickUpAuthenticatedUser, ClickUpApiError> {
+    let token = require_token()?;
+    let client = Client::new();
+
+    let response = client
+        .get(format!("{BASE_URL}/user"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| ClickUpApiError::RequestError(format!("Failed to fetch user: {e}")))?;
+
+    let response = check_response(response).await?;
+
+    #[derive(serde::Deserialize)]
+    struct UserResponse {
+        user: ClickUpAuthenticatedUser,
+    }
+
+    let data: UserResponse = response
+        .json()
+        .await
+        .map_err(|e| ClickUpApiError::RequestError(format!("Failed to parse user: {e}")))?;
+
+    Ok(data.user)
+}
+
 /// List workspaces the user has access to.
 /// ClickUp API calls these "teams".
 pub async fn list_workspaces() -> Result<Vec<ClickUpWorkspace>, ClickUpApiError> {
@@ -161,6 +189,8 @@ pub async fn list_tasks(
     space_ids: &[String],
     include_closed: bool,
     page: u32,
+    assignees: Option<&[u64]>,
+    subtasks: bool,
 ) -> Result<ClickUpTaskListResult, ClickUpApiError> {
     let token = require_token()?;
     let client = Client::new();
@@ -173,6 +203,16 @@ pub async fn list_tasks(
 
     for space_id in space_ids {
         url.push_str(&format!("&space_ids[]={space_id}"));
+    }
+
+    if let Some(ids) = assignees {
+        for id in ids {
+            url.push_str(&format!("&assignees[]={id}"));
+        }
+    }
+
+    if subtasks {
+        url.push_str("&subtasks=true");
     }
 
     // Order by most recently updated
@@ -271,6 +311,7 @@ pub async fn list_tasks_in_list(
     list_id: &str,
     include_closed: bool,
     page: u32,
+    subtasks: bool,
 ) -> Result<ClickUpTaskListResult, ClickUpApiError> {
     let token = require_token()?;
     let client = Client::new();
@@ -279,6 +320,10 @@ pub async fn list_tasks_in_list(
 
     if include_closed {
         url.push_str("&include_closed=true");
+    }
+
+    if subtasks {
+        url.push_str("&subtasks=true");
     }
 
     url.push_str("&order_by=updated&reverse=true");
@@ -544,5 +589,187 @@ mod tests {
         let err = ClickUpApiError::AuthError("test".to_string());
         let s: String = err.into();
         assert!(s.contains("test"));
+    }
+
+    #[test]
+    fn test_user_url_construction() {
+        let url = format!("{BASE_URL}/user");
+        assert_eq!(url, "https://api.clickup.com/api/v2/user");
+    }
+
+    #[test]
+    fn test_tasks_url_with_assignees_and_subtasks() {
+        let workspace_id = "ws123";
+        let page = 0;
+        let mut url = format!("{BASE_URL}/team/{workspace_id}/task?page={page}");
+        url.push_str("&include_closed=true");
+
+        // Assignees
+        let assignees: &[u64] = &[12345, 67890];
+        for id in assignees {
+            url.push_str(&format!("&assignees[]={id}"));
+        }
+
+        // Subtasks
+        url.push_str("&subtasks=true");
+
+        url.push_str("&order_by=updated&reverse=true");
+
+        assert_eq!(
+            url,
+            "https://api.clickup.com/api/v2/team/ws123/task?page=0&include_closed=true&assignees[]=12345&assignees[]=67890&subtasks=true&order_by=updated&reverse=true"
+        );
+    }
+
+    #[test]
+    fn test_tasks_url_without_assignees_or_subtasks() {
+        let workspace_id = "ws456";
+        let page = 2;
+        let mut url = format!("{BASE_URL}/team/{workspace_id}/task?page={page}");
+        // No include_closed, no assignees, no subtasks
+        url.push_str("&order_by=updated&reverse=true");
+
+        assert_eq!(
+            url,
+            "https://api.clickup.com/api/v2/team/ws456/task?page=2&order_by=updated&reverse=true"
+        );
+    }
+
+    #[test]
+    fn test_list_tasks_url_with_subtasks() {
+        let list_id = "list789";
+        let page = 0;
+        let mut url = format!("{BASE_URL}/list/{list_id}/task?page={page}");
+        url.push_str("&include_closed=true");
+        url.push_str("&subtasks=true");
+        url.push_str("&order_by=updated&reverse=true");
+
+        assert_eq!(
+            url,
+            "https://api.clickup.com/api/v2/list/list789/task?page=0&include_closed=true&subtasks=true&order_by=updated&reverse=true"
+        );
+    }
+
+    #[test]
+    fn test_list_tasks_url_without_subtasks() {
+        let list_id = "list789";
+        let page = 1;
+        let mut url = format!("{BASE_URL}/list/{list_id}/task?page={page}");
+        url.push_str("&order_by=updated&reverse=true");
+
+        assert_eq!(
+            url,
+            "https://api.clickup.com/api/v2/list/list789/task?page=1&order_by=updated&reverse=true"
+        );
+    }
+
+    #[test]
+    fn test_authenticated_user_deserialization() {
+        let json = r##"{
+            "user": {
+                "id": 12345,
+                "username": "testuser",
+                "email": "test@example.com",
+                "color": "#ff0000",
+                "profile_picture": "https://example.com/pic.jpg",
+                "initials": "TU"
+            }
+        }"##;
+
+        #[derive(serde::Deserialize)]
+        struct UserResponse {
+            user: ClickUpAuthenticatedUser,
+        }
+
+        let data: UserResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(data.user.id, 12345);
+        assert_eq!(data.user.username, "testuser");
+        assert_eq!(data.user.email, "test@example.com");
+        assert_eq!(data.user.color, Some("#ff0000".to_string()));
+        assert_eq!(
+            data.user.profile_picture,
+            Some("https://example.com/pic.jpg".to_string())
+        );
+        assert_eq!(data.user.initials, Some("TU".to_string()));
+    }
+
+    #[test]
+    fn test_authenticated_user_deserialization_minimal() {
+        let json = r#"{
+            "user": {
+                "id": 99,
+                "username": "minimal",
+                "email": "min@test.com"
+            }
+        }"#;
+
+        #[derive(serde::Deserialize)]
+        struct UserResponse {
+            user: ClickUpAuthenticatedUser,
+        }
+
+        let data: UserResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(data.user.id, 99);
+        assert_eq!(data.user.username, "minimal");
+        assert_eq!(data.user.email, "min@test.com");
+        assert_eq!(data.user.color, None);
+        assert_eq!(data.user.profile_picture, None);
+        assert_eq!(data.user.initials, None);
+    }
+
+    #[test]
+    fn test_clickup_task_deserialization_with_parent_and_assignees() {
+        let json = r##"{
+            "id": "task123",
+            "name": "Child task",
+            "status": {"status": "open", "color": "#d3d3d3", "type": "open"},
+            "date_created": "1700000000000",
+            "url": "https://app.clickup.com/t/task123",
+            "parent": "parent456",
+            "assignees": [
+                {"id": 1, "username": "alice", "initials": "A"},
+                {"id": 2, "username": "bob", "initials": "B"}
+            ]
+        }"##;
+
+        let task: ClickUpTask = serde_json::from_str(json).unwrap();
+        assert_eq!(task.id, "task123");
+        assert_eq!(task.parent, Some("parent456".to_string()));
+        assert_eq!(task.assignees.len(), 2);
+        assert_eq!(task.assignees[0].username, "alice");
+        assert_eq!(task.assignees[1].username, "bob");
+    }
+
+    #[test]
+    fn test_clickup_task_deserialization_without_parent_and_assignees() {
+        let json = r##"{
+            "id": "task789",
+            "name": "Top-level task",
+            "status": {"status": "in progress", "color": "#4194f6", "type": "custom"},
+            "date_created": "1700000000000",
+            "url": "https://app.clickup.com/t/task789"
+        }"##;
+
+        let task: ClickUpTask = serde_json::from_str(json).unwrap();
+        assert_eq!(task.id, "task789");
+        assert_eq!(task.parent, None);
+        assert!(task.assignees.is_empty());
+    }
+
+    #[test]
+    fn test_clickup_task_deserialization_with_null_parent() {
+        let json = r##"{
+            "id": "task000",
+            "name": "Null parent task",
+            "status": {"status": "open", "color": "#d3d3d3", "type": "open"},
+            "date_created": "1700000000000",
+            "url": "https://app.clickup.com/t/task000",
+            "parent": null,
+            "assignees": []
+        }"##;
+
+        let task: ClickUpTask = serde_json::from_str(json).unwrap();
+        assert_eq!(task.parent, None);
+        assert!(task.assignees.is_empty());
     }
 }

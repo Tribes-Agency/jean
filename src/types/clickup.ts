@@ -25,6 +25,10 @@ export interface ClickUpTask {
   status: ClickUpStatus
   dateCreated: string // Unix ms as string
   url: string
+  /** Parent task ID (null for top-level tasks, set when subtasks=true) */
+  parent: string | null
+  /** Task assignees */
+  assignees: ClickUpUser[]
 }
 
 export interface ClickUpComment {
@@ -91,6 +95,16 @@ export interface LoadedClickUpTaskContext {
   name: string
   commentCount: number
   workspaceId: string
+  subtaskCount: number
+}
+
+export interface ClickUpAuthenticatedUser {
+  id: number
+  username: string
+  email: string
+  color: string | null
+  profilePicture: string | null
+  initials: string | null
 }
 
 export type IssueSource = 'github' | 'clickup'

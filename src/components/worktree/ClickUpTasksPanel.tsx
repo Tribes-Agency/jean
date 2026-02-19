@@ -20,7 +20,8 @@ import {
 import { isTauri } from '@/services/projects'
 import type { ClickUpTask, ClickUpTaskListResult } from '@/types/clickup'
 import { ClickUpTaskItem } from './ClickUpTaskItem'
-import { ClickUpTreeView } from './ClickUpTreeView'
+import { CollapsibleTreeView } from './CollapsibleTreeView'
+import { MyTasksSection } from './MyTasksSection'
 
 interface ClickUpTasksPanelProps {
   selectedIndex: number
@@ -106,11 +107,10 @@ export function ClickUpTasksPanel({
   }, [taskResult?.tasks, searchQuery, directLookupTask])
 
   const handleRefresh = () => {
+    // Invalidate all clickup queries to refresh everything
+    queryClient.invalidateQueries({ queryKey: clickupQueryKeys.all })
     if (isSearching) {
       refetch()
-    } else {
-      // Invalidate all clickup queries to refresh tree
-      queryClient.invalidateQueries({ queryKey: clickupQueryKeys.all })
     }
   }
 
@@ -168,67 +168,81 @@ export function ClickUpTasksPanel({
         </div>
       </div>
 
-      {/* Tree mode (empty search) or flat search mode */}
-      {isSearching ? (
-        <ScrollArea className="flex-1">
-          {(isLoadingTasks || (isLookingUp && tasks.length === 0)) && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">
-                Loading tasks...
-              </span>
-            </div>
-          )}
-
-          {tasksError && (
-            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-              <AlertCircle className="h-5 w-5 text-destructive mb-2" />
-              <span className="text-sm text-muted-foreground">
-                {tasksError.message || 'Failed to load tasks'}
-              </span>
-            </div>
-          )}
-
-          {!isLoadingTasks &&
-            !isLookingUp &&
-            !tasksError &&
-            tasks.length === 0 && (
+      {/* Content area */}
+      {workspaceId ? (
+        isSearching ? (
+          /* Flat search mode — workspace-wide search results */
+          <ScrollArea className="flex-1">
+            {(isLoadingTasks || (isLookingUp && tasks.length === 0)) && (
               <div className="flex items-center justify-center py-8">
-                <span className="text-sm text-muted-foreground">
-                  No tasks match your search
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">
+                  Loading tasks...
                 </span>
               </div>
             )}
 
-          {!(isLoadingTasks || (isLookingUp && tasks.length === 0)) &&
-            !tasksError &&
-            tasks.length > 0 && (
-              <div className="py-1">
-                {tasks.map((task, index) => (
-                  <ClickUpTaskItem
-                    key={task.id}
-                    task={task}
-                    index={index}
-                    isSelected={index === selectedIndex}
-                    isCreating={creatingFromTaskId === task.id}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                    onClick={bg => onSelectTask(task, bg)}
-                    onInvestigate={bg => onInvestigateTask(task, bg)}
-                    onPreview={() => onPreviewTask(task)}
-                  />
-                ))}
+            {tasksError && (
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                <AlertCircle className="h-5 w-5 text-destructive mb-2" />
+                <span className="text-sm text-muted-foreground">
+                  {tasksError.message || 'Failed to load tasks'}
+                </span>
               </div>
             )}
-        </ScrollArea>
-      ) : workspaceId ? (
-        <ClickUpTreeView
-          workspaceId={workspaceId}
-          includeClosed={includeClosed}
-          onSelectTask={onSelectTask}
-          onInvestigateTask={onInvestigateTask}
-          onPreviewTask={onPreviewTask}
-          creatingFromTaskId={creatingFromTaskId}
-        />
+
+            {!isLoadingTasks &&
+              !isLookingUp &&
+              !tasksError &&
+              tasks.length === 0 && (
+                <div className="flex items-center justify-center py-8">
+                  <span className="text-sm text-muted-foreground">
+                    No tasks match your search
+                  </span>
+                </div>
+              )}
+
+            {!(isLoadingTasks || (isLookingUp && tasks.length === 0)) &&
+              !tasksError &&
+              tasks.length > 0 && (
+                <div className="py-1">
+                  {tasks.map((task, index) => (
+                    <ClickUpTaskItem
+                      key={task.id}
+                      task={task}
+                      index={index}
+                      isSelected={index === selectedIndex}
+                      isCreating={creatingFromTaskId === task.id}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                      onClick={bg => onSelectTask(task, bg)}
+                      onInvestigate={bg => onInvestigateTask(task, bg)}
+                      onPreview={() => onPreviewTask(task)}
+                    />
+                  ))}
+                </div>
+              )}
+          </ScrollArea>
+        ) : (
+          /* Browse mode — My Tasks + Collapsible Tree */
+          <ScrollArea className="flex-1">
+            <MyTasksSection
+              workspaceId={workspaceId}
+              includeClosed={includeClosed}
+              onSelectTask={onSelectTask}
+              onInvestigateTask={onInvestigateTask}
+              onPreviewTask={onPreviewTask}
+              creatingFromTaskId={creatingFromTaskId}
+            />
+            <CollapsibleTreeView
+              workspaceId={workspaceId}
+              includeClosed={includeClosed}
+              onSelectTask={onSelectTask}
+              onInvestigateTask={onInvestigateTask}
+              onPreviewTask={onPreviewTask}
+              creatingFromTaskId={creatingFromTaskId}
+            />
+          </ScrollArea>
+        )
       ) : (
         <div className="flex items-center justify-center py-8">
           <span className="text-sm text-muted-foreground">

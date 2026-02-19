@@ -58,6 +58,12 @@ pub struct ClickUpTask {
     #[serde(alias = "date_created")]
     pub date_created: String, // Unix ms as string
     pub url: String,
+    /// Parent task ID (null for top-level tasks, set when subtasks=true)
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// Task assignees
+    #[serde(default)]
+    pub assignees: Vec<ClickUpUser>,
 }
 
 /// ClickUp comment on a task
@@ -150,6 +156,21 @@ pub struct ClickUpSpaceHierarchy {
     pub folderless_lists: Vec<ClickUpList>,
 }
 
+/// Authenticated user info from GET /user
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClickUpAuthenticatedUser {
+    pub id: u64,
+    pub username: String,
+    pub email: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default, alias = "profile_picture")]
+    pub profile_picture: Option<String>,
+    #[serde(default)]
+    pub initials: Option<String>,
+}
+
 /// Auth status check result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -180,4 +201,6 @@ pub struct LoadedClickUpTaskContext {
     pub comment_count: u32,
     #[serde(alias = "workspace_id")]
     pub workspace_id: String,
+    #[serde(default, alias = "subtask_count")]
+    pub subtask_count: u32,
 }
