@@ -3,6 +3,7 @@ import {
   CircleDot,
   GitPullRequest,
   GitMerge,
+  GitBranch,
   Loader2,
   MessageSquare,
   CheckCircle2,
@@ -11,6 +12,7 @@ import {
   Clock,
   ExternalLink,
   ArrowLeft,
+  Wand2,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import {
@@ -35,7 +37,7 @@ import type {
   GitHubReview,
   GitHubLabel,
 } from '@/types/github'
-import type { ClickUpTask } from '@/types/clickup'
+import type { ClickUpTask, ClickUpTaskDetail } from '@/types/clickup'
 
 type IssuePreviewModalProps =
   | {
@@ -53,6 +55,19 @@ type IssuePreviewModalProps =
       onSelectTask?: (task: ClickUpTask, background?: boolean) => void
       onInvestigateTask?: (task: ClickUpTask, background?: boolean) => void
     }
+
+function taskAsClickUpTask(detail: ClickUpTaskDetail): ClickUpTask {
+  return {
+    id: detail.id,
+    customId: detail.customId,
+    name: detail.name,
+    status: detail.status,
+    dateCreated: detail.dateCreated,
+    url: detail.url,
+    parent: null,
+    assignees: [],
+  }
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -390,6 +405,22 @@ function ClickUpPreviewModalContent({
     setTaskStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev))
   }, [])
 
+  const handleSelect = useCallback(
+    (t: ClickUpTask, background?: boolean) => {
+      onOpenChange(false)
+      onSelectTask?.(t, background)
+    },
+    [onOpenChange, onSelectTask]
+  )
+
+  const handleInvestigate = useCallback(
+    (t: ClickUpTask, background?: boolean) => {
+      onOpenChange(false)
+      onInvestigateTask?.(t, background)
+    },
+    [onOpenChange, onInvestigateTask]
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!w-screen !max-w-screen sm:!w-[90vw] sm:!max-w-4xl sm:!h-[85vh] sm:!max-h-[85vh] sm:!rounded-lg flex flex-col overflow-hidden z-[80] [&>[data-slot=dialog-close]]:top-6">
@@ -419,11 +450,32 @@ function ClickUpPreviewModalContent({
             <ClickUpTaskPreview
               taskId={currentTaskId}
               onNavigateToTask={handleNavigateToTask}
-              onSelectTask={onSelectTask}
-              onInvestigateTask={onInvestigateTask}
+              onSelectTask={handleSelect}
+              onInvestigateTask={handleInvestigate}
             />
           </div>
         </ScrollArea>
+
+        {task && onSelectTask && (
+          <div className="flex-shrink-0 border-t border-border px-4 py-3 flex items-center gap-2">
+            <button
+              onClick={e => handleSelect(taskAsClickUpTask(task), e.metaKey)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <GitBranch className="h-3.5 w-3.5" />
+              Create worktree
+            </button>
+            <button
+              onClick={e =>
+                handleInvestigate(taskAsClickUpTask(task), e.metaKey)
+              }
+              className="inline-flex items-center gap-1.5 rounded-md bg-black px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-black/80 dark:bg-yellow-500/20 dark:text-yellow-400 dark:hover:bg-yellow-500/30 dark:hover:text-yellow-300"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Investigate
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
