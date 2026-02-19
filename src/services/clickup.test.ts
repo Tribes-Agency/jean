@@ -39,8 +39,10 @@ const createTestQueryClient = () =>
   })
 
 function createWrapper(queryClient: QueryClient) {
-  return ({ children }: { children: React.ReactNode }) =>
+  const Wrapper = ({ children }: { children: React.ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children)
+  Wrapper.displayName = 'TestQueryWrapper'
+  return Wrapper
 }
 
 describe('clickupQueryKeys', () => {
@@ -268,7 +270,7 @@ describe('filterClickUpTasks', () => {
     ]
     const result = filterClickUpTasks(tasks, 'login')
     expect(result).toHaveLength(1)
-    expect(result[0]!.name).toBe('Fix login bug')
+    expect(result[0]?.name).toBe('Fix login bug')
   })
 
   it('filters by custom ID', () => {
@@ -278,7 +280,7 @@ describe('filterClickUpTasks', () => {
     ]
     const result = filterClickUpTasks(tasks, 'PROJ-42')
     expect(result).toHaveLength(1)
-    expect(result[0]!.customId).toBe('PROJ-42')
+    expect(result[0]?.customId).toBe('PROJ-42')
   })
 
   it('filters by internal ID', () => {
@@ -288,7 +290,7 @@ describe('filterClickUpTasks', () => {
     ]
     const result = filterClickUpTasks(tasks, 'abc')
     expect(result).toHaveLength(1)
-    expect(result[0]!.id).toBe('abc123')
+    expect(result[0]?.id).toBe('abc123')
   })
 
   it('is case-insensitive', () => {
