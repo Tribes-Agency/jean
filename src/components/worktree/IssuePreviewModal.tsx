@@ -22,6 +22,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Markdown } from '@/components/ui/markdown'
 import { cn } from '@/lib/utils'
 import { useGitHubIssue, useGitHubPR } from '@/services/github'
+import { useClickUpTask } from '@/services/clickup'
+import {
+  ClickUpTaskPreview,
+  ClickUpTaskPreviewHeader,
+} from './ClickUpTaskPreview'
 import type {
   GitHubIssueDetail,
   GitHubPullRequestDetail,
@@ -30,13 +35,20 @@ import type {
   GitHubLabel,
 } from '@/types/github'
 
-interface IssuePreviewModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  projectPath: string
-  type: 'issue' | 'pr'
-  number: number
-}
+type IssuePreviewModalProps =
+  | {
+      open: boolean
+      onOpenChange: (open: boolean) => void
+      projectPath: string
+      type: 'issue' | 'pr'
+      number: number
+    }
+  | {
+      open: boolean
+      onOpenChange: (open: boolean) => void
+      type: 'clickup-task'
+      taskId: string
+    }
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -321,13 +333,77 @@ function PRContent({ detail }: { detail: GitHubPullRequestDetail }) {
   )
 }
 
-export function IssuePreviewModal({
+export function IssuePreviewModal(props: IssuePreviewModalProps) {
+  const { open, onOpenChange, type } = props
+
+  if (type === 'clickup-task') {
+    return (
+      <ClickUpPreviewModalContent
+        open={open}
+        onOpenChange={onOpenChange}
+        taskId={props.taskId}
+      />
+    )
+  }
+
+  return (
+    <GitHubPreviewModalContent
+      open={open}
+      onOpenChange={onOpenChange}
+      projectPath={props.projectPath}
+      type={type}
+      number={props.number}
+    />
+  )
+}
+
+function ClickUpPreviewModalContent({
+  open,
+  onOpenChange,
+  taskId,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  taskId: string
+}) {
+  const { data: task } = useClickUpTask(taskId)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="!w-screen !max-w-screen sm:!w-[90vw] sm:!max-w-4xl sm:!h-[85vh] sm:!max-h-[85vh] sm:!rounded-lg flex flex-col overflow-hidden z-[80] [&>[data-slot=dialog-close]]:top-6">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>
+            <ClickUpTaskPreviewHeader
+              taskId={taskId}
+              customId={task?.customId}
+              url={task?.url}
+            />
+          </DialogTitle>
+        </DialogHeader>
+
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="select-text space-y-4 pr-4 pb-4">
+            <ClickUpTaskPreview taskId={taskId} />
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function GitHubPreviewModalContent({
   open,
   onOpenChange,
   projectPath,
   type,
   number,
-}: IssuePreviewModalProps) {
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projectPath: string
+  type: 'issue' | 'pr'
+  number: number
+}) {
   const issueQuery = useGitHubIssue(
     projectPath,
     type === 'issue' ? number : null

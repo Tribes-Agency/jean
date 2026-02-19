@@ -82,7 +82,8 @@ export function useUIStatePersistence() {
       projectAccessTimestamps,
       dashboardWorktreeCollapseOverrides,
     } = useProjectsStore.getState()
-    const { leftSidebarSize, leftSidebarVisible } = useUIStore.getState()
+    const { leftSidebarSize, leftSidebarVisible, issueSource } =
+      useUIStore.getState()
     const { modalTerminalOpen, modalTerminalWidth } =
       useTerminalStore.getState()
 
@@ -107,6 +108,8 @@ export function useUIStatePersistence() {
       project_access_timestamps: projectAccessTimestamps,
       // Dashboard worktree collapse overrides
       dashboard_worktree_collapse_overrides: dashboardWorktreeCollapseOverrides,
+      // Issue source selector (github or clickup)
+      issue_source: issueSource,
       version: 1, // Reset for first release
     }
   }, [])
@@ -306,6 +309,14 @@ export function useUIStatePersistence() {
       })
     }
 
+    // Restore issue source selector (github or clickup)
+    if (
+      uiState.issue_source === 'github' ||
+      uiState.issue_source === 'clickup'
+    ) {
+      useUIStore.getState().setIssueSource(uiState.issue_source)
+    }
+
     queueMicrotask(() => {
       setIsInitialized(true)
       useUIStore.getState().setUIStateInitialized(true)
@@ -370,15 +381,19 @@ export function useUIStatePersistence() {
       }
     })
 
-    // Subscribe to ui-store changes (sidebar size and visibility)
+    let prevIssueSource = useUIStore.getState().issueSource
+
+    // Subscribe to ui-store changes (sidebar size, visibility, issue source)
     const unsubUI = useUIStore.subscribe(state => {
       const sizeChanged = state.leftSidebarSize !== prevLeftSidebarSize
       const visibilityChanged =
         state.leftSidebarVisible !== prevLeftSidebarVisible
+      const issueSourceChanged = state.issueSource !== prevIssueSource
 
-      if (sizeChanged || visibilityChanged) {
+      if (sizeChanged || visibilityChanged || issueSourceChanged) {
         prevLeftSidebarSize = state.leftSidebarSize
         prevLeftSidebarVisible = state.leftSidebarVisible
+        prevIssueSource = state.issueSource
         const currentState = getCurrentUIState()
         debouncedSaveRef.current?.(currentState)
       }

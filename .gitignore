@@ -27,3 +27,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.ralph
+specs/
+ralph.yml

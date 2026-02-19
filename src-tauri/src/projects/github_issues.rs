@@ -374,6 +374,8 @@ pub struct ContextRef {
 pub struct ContextReferences {
     pub issues: std::collections::HashMap<String, ContextRef>,
     pub prs: std::collections::HashMap<String, ContextRef>,
+    #[serde(default)]
+    pub clickup_tasks: std::collections::HashMap<String, ContextRef>,
 }
 
 /// Get the directory for shared GitHub contexts
@@ -654,8 +656,85 @@ pub fn remove_all_session_references(
         }
     }
 
+    // Also clean up ClickUp task references
+    for (_key, entry) in refs.clickup_tasks.iter_mut() {
+        entry.sessions.retain(|s| s != session_id);
+        if entry.sessions.is_empty() && entry.orphaned_at.is_none() {
+            entry.orphaned_at = Some(now);
+        }
+    }
+
     save_context_references(app, &refs)?;
     Ok((orphaned_issues, orphaned_prs))
+}
+
+// =============================================================================
+// ClickUp Context Reference Helpers (used by clickup::commands)
+// =============================================================================
+
+/// Add a session reference to a ClickUp task context
+/// Key format: "clickup-{task_id}"
+pub fn add_clickup_task_reference(
+    app: &tauri::AppHandle,
+    task_id: &str,
+    session_id: &str,
+) -> Result<(), String> {
+    let mut refs = load_context_references(app)?;
+    let key = format!("clickup-{task_id}");
+
+    let entry = refs.clickup_tasks.entry(key).or_default();
+    if !entry.sessions.contains(&session_id.to_string()) {
+        entry.sessions.push(session_id.to_string());
+    }
+    entry.orphaned_at = None;
+
+    save_context_references(app, &refs)
+}
+
+/// Remove a session reference from a ClickUp task context
+/// Returns true if the context is now orphaned (no more references)
+pub fn remove_clickup_task_reference(
+    app: &tauri::AppHandle,
+    task_id: &str,
+    session_id: &str,
+) -> Result<bool, String> {
+    let mut refs = load_context_references(app)?;
+    let key = format!("clickup-{task_id}");
+
+    let orphaned = if let Some(entry) = refs.clickup_tasks.get_mut(&key) {
+        entry.sessions.retain(|s| s != session_id);
+        if entry.sessions.is_empty() && entry.orphaned_at.is_none() {
+            entry.orphaned_at = Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            );
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    save_context_references(app, &refs)?;
+    Ok(orphaned)
+}
+
+/// Get all ClickUp task keys referenced by a session
+/// Returns keys in format "clickup-{task_id}"
+pub fn get_session_clickup_task_refs(
+    app: &tauri::AppHandle,
+    session_id: &str,
+) -> Result<Vec<String>, String> {
+    let refs = load_context_references(app)?;
+    Ok(refs
+        .clickup_tasks
+        .iter()
+        .filter(|(_, entry)| entry.sessions.contains(&session_id.to_string()))
+        .map(|(key, _)| key.clone())
+        .collect())
 }
 
 /// Parse a context key into (repo_owner, repo_name, number)

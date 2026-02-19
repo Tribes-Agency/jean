@@ -32,6 +32,8 @@ export interface UIState {
   project_access_timestamps?: Record<string, number>
   /** Dashboard worktree collapse overrides: worktreeId → collapsed (true/false) */
   dashboard_worktree_collapse_overrides?: Record<string, boolean>
+  /** Last-selected issue source in New Worktree modal: "github" | "clickup" */
+  issue_source?: string
   version: number
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { logger } from '@/lib/logger'
 import { getModifierSymbol } from '@/lib/platform'
 import { invoke } from '@/lib/transport'
 import { useQueryClient } from '@tanstack/react-query'
@@ -68,6 +69,12 @@ import type {
   PullRequestContext,
 } from '@/types/github'
 import { IssuePreviewModal } from './IssuePreviewModal'
+import { IssueSourceSelector } from './IssueSourceSelector'
+import { ClickUpSetup } from './ClickUpSetup'
+import { ClickUpTasksPanel } from './ClickUpTasksPanel'
+import type { IssueSource, ClickUpTask } from '@/types/clickup'
+import { useClickUpAuth, loadClickUpTaskContext } from '@/services/clickup'
+import { usePreferences } from '@/services/preferences'
 
 export type TabId = 'quick' | 'issues' | 'prs' | 'branches'
 
@@ -76,6 +83,21 @@ export interface Tab {
   label: string
   key: string
   icon: LucideIcon
+}
+
+/** Generate a branch name from a ClickUp task, mirroring the Rust slugify logic */
+function generateClickUpBranchName(task: ClickUpTask): string {
+  const idPart = task.customId ?? task.id
+  const slug = task.name
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 5)
+    .join('-')
+    .slice(0, 40)
+    .replace(/-$/, '')
+  return `clickup-${idPart}-${slug}`
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -90,6 +112,8 @@ export function NewWorktreeModal() {
   const queryClient = useQueryClient()
   const { triggerLogin: triggerGhLogin, isGhInstalled } = useGhLogin()
   const { newWorktreeModalOpen, setNewWorktreeModalOpen } = useUIStore()
+  const issueSource = useUIStore(state => state.issueSource)
+  const setIssueSource = useUIStore(state => state.setIssueSource)
   const selectedProjectId = useProjectsStore(state => state.selectedProjectId)
 
   // Get project data
@@ -118,11 +142,15 @@ export function NewWorktreeModal() {
   const [creatingFromNumber, setCreatingFromNumber] = useState<number | null>(
     null
   )
-  const [previewItem, setPreviewItem] = useState<{
-    type: 'issue' | 'pr'
-    number: number
-  } | null>(null)
+  const [previewItem, setPreviewItem] = useState<
+    | { type: 'issue' | 'pr'; number: number }
+    | { type: 'clickup-task'; taskId: string }
+    | null
+  >(null)
   const [creatingFromBranch, setCreatingFromBranch] = useState<string | null>(
+    null
+  )
+  const [creatingFromTaskId, setCreatingFromTaskId] = useState<string | null>(
     null
   )
 
@@ -187,6 +215,15 @@ export function NewWorktreeModal() {
     refetch: refetchBranches,
   } = useProjectBranches(selectedProjectId)
 
+  // ClickUp queries — only active when ClickUp source is selected
+  const { data: preferences } = usePreferences()
+  const clickupWorkspaceId = preferences?.clickup_workspace_id ?? null
+  const hasClickUpCredentials =
+    !!preferences?.clickup_client_id && !!preferences?.clickup_client_secret
+  const clickUpAuth = useClickUpAuth({ enabled: hasClickUpCredentials })
+  const isClickUpConfigured =
+    clickUpAuth.data?.authenticated === true && !!clickupWorkspaceId
+
   // Filter branches locally (exclude the base/default branch)
   const filteredBranches = useMemo(() => {
     if (!branches) return []
@@ -243,6 +280,7 @@ export function NewWorktreeModal() {
       // Always reset these states on open/close
       setCreatingFromNumber(null)
       setCreatingFromBranch(null)
+      setCreatingFromTaskId(null)
       setSearchQuery('')
       setSelectedItemIndex(0)
 
@@ -630,6 +668,93 @@ export function NewWorktreeModal() {
     [selectedProjectId, selectedProject, createWorktree, handleOpenChange]
   )
 
+  // ClickUp task selection: create worktree with task context
+  const handleSelectClickUpTask = useCallback(
+    async (task: ClickUpTask, background = false) => {
+      if (!selectedProjectId) {
+        toast.error('No project selected')
+        return
+      }
+      setCreatingFromTaskId(task.id)
+      try {
+        if (background)
+          useUIStore.getState().incrementPendingBackgroundCreations()
+
+        const customName = generateClickUpBranchName(task)
+        const worktree = await createWorktree.mutateAsync({
+          projectId: selectedProjectId,
+          customName,
+          background,
+        })
+
+        // Load task context in background (don't block on it)
+        if (clickupWorkspaceId) {
+          loadClickUpTaskContext(
+            worktree.id,
+            task.id,
+            clickupWorkspaceId
+          ).catch(err =>
+            logger.warn('Failed to load ClickUp task context', { err })
+          )
+        }
+
+        if (background) {
+          setCreatingFromTaskId(null)
+        } else {
+          handleOpenChange(false)
+        }
+      } catch (error) {
+        toast.error(`Failed to create worktree: ${error}`)
+        setCreatingFromTaskId(null)
+      }
+    },
+    [selectedProjectId, clickupWorkspaceId, createWorktree, handleOpenChange]
+  )
+
+  // ClickUp task selection + investigate
+  const handleSelectClickUpTaskAndInvestigate = useCallback(
+    async (task: ClickUpTask, background = false) => {
+      if (!selectedProjectId) {
+        toast.error('No project selected')
+        return
+      }
+      setCreatingFromTaskId(task.id)
+      try {
+        useUIStore.getState().setPendingInvestigateType('issue')
+        if (background)
+          useUIStore.getState().incrementPendingBackgroundCreations()
+
+        const customName = generateClickUpBranchName(task)
+        const worktree = await createWorktree.mutateAsync({
+          projectId: selectedProjectId,
+          customName,
+          background,
+        })
+
+        // Load task context in background (don't block on it)
+        if (clickupWorkspaceId) {
+          loadClickUpTaskContext(
+            worktree.id,
+            task.id,
+            clickupWorkspaceId
+          ).catch(err =>
+            logger.warn('Failed to load ClickUp task context', { err })
+          )
+        }
+
+        if (background) {
+          setCreatingFromTaskId(null)
+        } else {
+          handleOpenChange(false)
+        }
+      } catch (error) {
+        toast.error(`Failed to create worktree: ${error}`)
+        setCreatingFromTaskId(null)
+      }
+    },
+    [selectedProjectId, clickupWorkspaceId, createWorktree, handleOpenChange]
+  )
+
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -678,33 +803,36 @@ export function NewWorktreeModal() {
         }
       }
 
-      // Issues tab navigation
-      if (activeTab === 'issues' && filteredIssues.length > 0) {
-        if (key === 'arrowdown') {
-          e.preventDefault()
-          setSelectedItemIndex(prev =>
-            Math.min(prev + 1, filteredIssues.length - 1)
-          )
-          return
+      // Issues tab navigation (GitHub or ClickUp depending on source)
+      if (activeTab === 'issues') {
+        if (issueSource === 'github' && filteredIssues.length > 0) {
+          if (key === 'arrowdown') {
+            e.preventDefault()
+            setSelectedItemIndex(prev =>
+              Math.min(prev + 1, filteredIssues.length - 1)
+            )
+            return
+          }
+          if (key === 'arrowup') {
+            e.preventDefault()
+            setSelectedItemIndex(prev => Math.max(prev - 1, 0))
+            return
+          }
+          if (key === 'enter' && filteredIssues[selectedItemIndex]) {
+            e.preventDefault()
+            handleSelectIssue(filteredIssues[selectedItemIndex], e.metaKey)
+            return
+          }
+          if (key === 'm' && filteredIssues[selectedItemIndex]) {
+            e.preventDefault()
+            handleSelectIssueAndInvestigate(
+              filteredIssues[selectedItemIndex],
+              e.metaKey
+            )
+            return
+          }
         }
-        if (key === 'arrowup') {
-          e.preventDefault()
-          setSelectedItemIndex(prev => Math.max(prev - 1, 0))
-          return
-        }
-        if (key === 'enter' && filteredIssues[selectedItemIndex]) {
-          e.preventDefault()
-          handleSelectIssue(filteredIssues[selectedItemIndex], e.metaKey)
-          return
-        }
-        if (key === 'm' && filteredIssues[selectedItemIndex]) {
-          e.preventDefault()
-          handleSelectIssueAndInvestigate(
-            filteredIssues[selectedItemIndex],
-            e.metaKey
-          )
-          return
-        }
+        // ClickUp keyboard nav is handled within the tree/search panel
       }
 
       // PRs tab navigation
@@ -759,6 +887,7 @@ export function NewWorktreeModal() {
     },
     [
       activeTab,
+      issueSource,
       filteredIssues,
       filteredPRs,
       filteredBranches,
@@ -812,7 +941,10 @@ export function NewWorktreeModal() {
           )}
 
           {activeTab === 'issues' && (
-            <GitHubIssuesTab
+            <IssuesTab
+              issueSource={issueSource}
+              onSourceChange={setIssueSource}
+              isClickUpConfigured={isClickUpConfigured}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               includeClosed={includeClosed}
@@ -834,6 +966,12 @@ export function NewWorktreeModal() {
               searchInputRef={searchInputRef}
               onGhLogin={triggerGhLogin}
               isGhInstalled={isGhInstalled}
+              onSelectClickUpTask={handleSelectClickUpTask}
+              onInvestigateClickUpTask={handleSelectClickUpTaskAndInvestigate}
+              onPreviewClickUpTask={task =>
+                setPreviewItem({ type: 'clickup-task', taskId: task.id })
+              }
+              creatingFromTaskId={creatingFromTaskId}
             />
           )}
 
@@ -894,17 +1032,29 @@ export function NewWorktreeModal() {
           </div>
         )}
       </DialogContent>
-      {previewItem && selectedProject && (
+      {previewItem && previewItem.type === 'clickup-task' && (
         <IssuePreviewModal
           open={!!previewItem}
           onOpenChange={open => {
             if (!open) setPreviewItem(null)
           }}
-          projectPath={selectedProject.path}
-          type={previewItem.type}
-          number={previewItem.number}
+          type="clickup-task"
+          taskId={previewItem.taskId}
         />
       )}
+      {previewItem &&
+        previewItem.type !== 'clickup-task' &&
+        selectedProject && (
+          <IssuePreviewModal
+            open={!!previewItem}
+            onOpenChange={open => {
+              if (!open) setPreviewItem(null)
+            }}
+            projectPath={selectedProject.path}
+            type={previewItem.type}
+            number={previewItem.number}
+          />
+        )}
     </Dialog>
   )
 }
@@ -1051,6 +1201,57 @@ export function QuickActionsTab({
             <TooltipContent side="bottom">Configure jean.json</TooltipContent>
           </Tooltip>
         </div>
+      )}
+    </div>
+  )
+}
+
+interface IssuesTabProps extends GitHubIssuesTabProps {
+  issueSource: IssueSource
+  onSourceChange: (source: IssueSource) => void
+  isClickUpConfigured: boolean
+  onSelectClickUpTask: (task: ClickUpTask, background?: boolean) => void
+  onInvestigateClickUpTask: (task: ClickUpTask, background?: boolean) => void
+  onPreviewClickUpTask: (task: ClickUpTask) => void
+  creatingFromTaskId: string | null
+}
+
+function IssuesTab({
+  issueSource,
+  onSourceChange,
+  isClickUpConfigured,
+  onSelectClickUpTask,
+  onInvestigateClickUpTask,
+  onPreviewClickUpTask,
+  creatingFromTaskId,
+  ...githubProps
+}: IssuesTabProps) {
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Source selector */}
+      <div className="px-3 pt-2">
+        <IssueSourceSelector value={issueSource} onChange={onSourceChange} />
+      </div>
+
+      {/* Conditionally render source panel */}
+      {issueSource === 'github' ? (
+        <GitHubIssuesTab {...githubProps} />
+      ) : isClickUpConfigured ? (
+        <ClickUpTasksPanel
+          selectedIndex={githubProps.selectedIndex}
+          setSelectedIndex={githubProps.setSelectedIndex}
+          onSelectTask={onSelectClickUpTask}
+          onInvestigateTask={onInvestigateClickUpTask}
+          onPreviewTask={onPreviewClickUpTask}
+          creatingFromTaskId={creatingFromTaskId}
+          searchInputRef={githubProps.searchInputRef}
+          searchQuery={githubProps.searchQuery}
+          setSearchQuery={githubProps.setSearchQuery}
+          includeClosed={githubProps.includeClosed}
+          setIncludeClosed={githubProps.setIncludeClosed}
+        />
+      ) : (
+        <ClickUpSetup />
       )}
     </div>
   )

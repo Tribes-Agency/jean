@@ -554,6 +554,10 @@ export interface AppPreferences {
   default_codex_reasoning_effort: CodexReasoningEffort // Default reasoning effort for Codex: 'low' | 'medium' | 'high' | 'xhigh'
   codex_multi_agent_enabled: boolean // Enable Codex multi-agent collaboration (experimental)
   codex_max_agent_threads: number // Max concurrent agent threads (1-8) when multi-agent is enabled
+  clickup_client_id: string | null // ClickUp OAuth app client ID
+  clickup_client_secret: string | null // ClickUp OAuth app client secret
+  clickup_workspace_id: string | null // Default ClickUp workspace ID
+  clickup_space_id: string | null // Default ClickUp space ID
 }
 
 export type CanvasLayout = 'grid' | 'list'
@@ -1030,4 +1034,8 @@ export const defaultPreferences: AppPreferences = {
   default_codex_reasoning_effort: 'high', // Default: high reasoning
   codex_multi_agent_enabled: false, // Default: disabled
   codex_max_agent_threads: 3, // Default: 3 threads
+  clickup_client_id: null,
+  clickup_client_secret: null,
+  clickup_workspace_id: null,
+  clickup_space_id: null,
 }

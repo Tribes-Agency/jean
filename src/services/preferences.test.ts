@@ -139,6 +139,10 @@ describe('preferences service', () => {
         default_codex_reasoning_effort: 'high',
         codex_multi_agent_enabled: false,
         codex_max_agent_threads: 3,
+        clickup_client_id: null,
+        clickup_client_secret: null,
+        clickup_workspace_id: null,
+        clickup_space_id: null,
       }
       vi.mocked(invoke).mockResolvedValueOnce(mockPreferences)
 
@@ -245,6 +249,10 @@ describe('preferences service', () => {
         default_codex_reasoning_effort: 'high',
         codex_multi_agent_enabled: false,
         codex_max_agent_threads: 3,
+        clickup_client_id: null,
+        clickup_client_secret: null,
+        clickup_workspace_id: null,
+        clickup_space_id: null,
       }
       vi.mocked(invoke).mockResolvedValueOnce(prefsWithOldBinding)
 
@@ -327,6 +335,10 @@ describe('preferences service', () => {
         default_codex_reasoning_effort: 'high',
         codex_multi_agent_enabled: false,
         codex_max_agent_threads: 3,
+        clickup_client_id: null,
+        clickup_client_secret: null,
+        clickup_workspace_id: null,
+        clickup_space_id: null,
       }
 
       const { result } = renderHook(() => useSavePreferences(), {
@@ -408,6 +420,10 @@ describe('preferences service', () => {
         default_codex_reasoning_effort: 'high',
         codex_multi_agent_enabled: false,
         codex_max_agent_threads: 3,
+        clickup_client_id: null,
+        clickup_client_secret: null,
+        clickup_workspace_id: null,
+        clickup_space_id: null,
       }
 
       const { result } = renderHook(() => useSavePreferences(), {
@@ -489,6 +505,10 @@ describe('preferences service', () => {
         default_codex_reasoning_effort: 'high',
         codex_multi_agent_enabled: false,
         codex_max_agent_threads: 3,
+        clickup_client_id: null,
+        clickup_client_secret: null,
+        clickup_workspace_id: null,
+        clickup_space_id: null,
       }
 
       const { result } = renderHook(() => useSavePreferences(), {
@@ -568,6 +588,10 @@ describe('preferences service', () => {
         default_codex_reasoning_effort: 'high',
         codex_multi_agent_enabled: false,
         codex_max_agent_threads: 3,
+        clickup_client_id: null,
+        clickup_client_secret: null,
+        clickup_workspace_id: null,
+        clickup_space_id: null,
       }
 
       const { result } = renderHook(() => useSavePreferences(), {

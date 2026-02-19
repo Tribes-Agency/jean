@@ -10,6 +10,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuild
 
 mod background_tasks;
 mod chat;
+mod clickup;
 mod claude_cli;
 mod codex_cli;
 mod diagnostics;
@@ -191,6 +192,14 @@ pub struct AppPreferences {
     pub codex_multi_agent_enabled: bool, // Enable multi-agent collaboration (experimental)
     #[serde(default = "default_codex_max_agent_threads")]
     pub codex_max_agent_threads: u32, // Max concurrent agent threads (1-8)
+    #[serde(default)]
+    pub clickup_client_id: Option<String>, // ClickUp OAuth app client ID
+    #[serde(default)]
+    pub clickup_client_secret: Option<String>, // ClickUp OAuth app client secret
+    #[serde(default)]
+    pub clickup_workspace_id: Option<String>, // Default ClickUp workspace ID
+    #[serde(default)]
+    pub clickup_space_id: Option<String>, // Default ClickUp space ID
 }
 
 fn default_true() -> Option<bool> {
@@ -840,6 +849,10 @@ impl Default for AppPreferences {
             default_codex_reasoning_effort: default_codex_reasoning_effort(),
             codex_multi_agent_enabled: false,
             codex_max_agent_threads: default_codex_max_agent_threads(),
+            clickup_client_id: None,
+            clickup_client_secret: None,
+            clickup_workspace_id: None,
+            clickup_space_id: None,
         }
     }
 }
@@ -912,6 +925,10 @@ pub struct UIState {
     #[serde(default)]
     pub dashboard_worktree_collapse_overrides: std::collections::HashMap<String, bool>,
 
+    /// Last-selected issue source in New Worktree modal: "github" or "clickup"
+    #[serde(default)]
+    pub issue_source: Option<String>,
+
     /// Version for future migration support
     #[serde(default = "default_ui_state_version")]
     pub version: u32,
@@ -939,6 +956,7 @@ impl Default for UIState {
             modal_terminal_width: None,
             project_access_timestamps: std::collections::HashMap::new(),
             dashboard_worktree_collapse_overrides: std::collections::HashMap::new(),
+            issue_source: None,
             version: default_ui_state_version(),
         }
     }
@@ -2163,6 +2181,20 @@ pub fn run() {
             stop_http_server,
             get_http_server_status,
             regenerate_http_token,
+            // ClickUp commands
+            clickup::commands::clickup_check_auth,
+            clickup::commands::clickup_logout,
+            clickup::auth::clickup_start_oauth,
+            clickup::commands::clickup_list_workspaces,
+            clickup::commands::clickup_list_spaces,
+            clickup::commands::clickup_list_tasks,
+            clickup::commands::clickup_get_space_hierarchy,
+            clickup::commands::clickup_list_tasks_in_list,
+            clickup::commands::clickup_search_task_by_id,
+            clickup::commands::clickup_get_task,
+            clickup::commands::load_clickup_task_context,
+            clickup::commands::list_loaded_clickup_task_contexts,
+            clickup::commands::remove_clickup_task_context,
         ])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
