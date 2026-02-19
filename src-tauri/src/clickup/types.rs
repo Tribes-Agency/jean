@@ -95,6 +95,9 @@ pub struct ClickUpTaskDetail {
     pub url: String,
     #[serde(default)]
     pub comments: Vec<ClickUpComment>,
+    /// Subtasks (populated by the command, not the API directly)
+    #[serde(default)]
+    pub subtasks: Vec<ClickUpTask>,
 }
 
 /// ClickUp workspace (called "team" in API)
@@ -169,6 +172,18 @@ pub struct ClickUpAuthenticatedUser {
     pub profile_picture: Option<String>,
     #[serde(default)]
     pub initials: Option<String>,
+}
+
+/// Shared hierarchy: tasks, lists, and folders shared with the authenticated user
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClickUpSharedHierarchy {
+    #[serde(default)]
+    pub tasks: Vec<ClickUpTask>,
+    #[serde(default)]
+    pub lists: Vec<ClickUpList>,
+    #[serde(default)]
+    pub folders: Vec<ClickUpFolder>,
 }
 
 /// Auth status check result

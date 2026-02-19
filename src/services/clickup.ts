@@ -10,6 +10,7 @@ import type {
   ClickUpTaskDetail,
   ClickUpTaskListResult,
   ClickUpSpaceHierarchy,
+  ClickUpSharedHierarchy,
   LoadedClickUpTaskContext,
 } from '@/types/clickup'
 import { isTauri } from './projects'
@@ -38,6 +39,8 @@ export const clickupQueryKeys = {
   task: (taskId: string) => [...clickupQueryKeys.all, 'task', taskId] as const,
   loadedContexts: (sessionId: string) =>
     [...clickupQueryKeys.all, 'loaded-contexts', sessionId] as const,
+  sharedHierarchy: (workspaceId: string) =>
+    [...clickupQueryKeys.all, 'shared-hierarchy', workspaceId] as const,
   user: () => [...clickupQueryKeys.all, 'user'] as const,
   myTasks: (workspaceId: string, includeClosed: boolean) =>
     [
@@ -235,6 +238,39 @@ export function useClickUpSpaceHierarchy(
       }
     },
     enabled: (options?.enabled ?? true) && !!spaceId,
+    staleTime: 1000 * 60 * 2,
+    gcTime: 1000 * 60 * 10,
+    retry: 1,
+  })
+}
+
+/**
+ * Hook to get the shared hierarchy (tasks, lists, folders shared with the user)
+ */
+export function useClickUpSharedHierarchy(
+  workspaceId: string | null,
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: clickupQueryKeys.sharedHierarchy(workspaceId ?? ''),
+    queryFn: async (): Promise<ClickUpSharedHierarchy> => {
+      if (!isTauri() || !workspaceId) {
+        return { tasks: [], lists: [], folders: [] }
+      }
+
+      logger.debug('Fetching ClickUp shared hierarchy', { workspaceId })
+      const shared = await invoke<ClickUpSharedHierarchy>(
+        'clickup_get_shared_hierarchy',
+        { workspaceId }
+      )
+      logger.info('ClickUp shared hierarchy loaded', {
+        tasks: shared.tasks.length,
+        lists: shared.lists.length,
+        folders: shared.folders.length,
+      })
+      return shared
+    },
+    enabled: (options?.enabled ?? true) && !!workspaceId,
     staleTime: 1000 * 60 * 2,
     gcTime: 1000 * 60 * 10,
     retry: 1,

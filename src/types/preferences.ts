@@ -37,6 +37,8 @@ export interface MagicPrompts {
   investigate_issue: string | null
   /** Prompt for investigating GitHub pull requests */
   investigate_pr: string | null
+  /** Prompt for investigating ClickUp tasks */
+  investigate_clickup_task: string | null
   /** Prompt for generating PR title/body */
   pr_content: string | null
   /** Prompt for generating commit messages */
@@ -157,6 +159,36 @@ Investigate the loaded GitHub {prWord} ({prRefs})
 - Reference specific file paths and line numbers
 
 </guidelines>`
+
+/** Default prompt for investigating ClickUp tasks */
+export const DEFAULT_INVESTIGATE_CLICKUP_TASK_PROMPT = `Investigate the loaded ClickUp {taskWord} ({taskRefs})
+
+Instructions:
+
+1. Read the task context file(s) to understand the full description, comments, and subtasks
+2. Analyze the task:
+   - What is being requested?
+   - Are there acceptance criteria or requirements?
+   - What subtasks exist and what is their status?
+3. Explore the codebase to find relevant code:
+   - Search for files/functions related to the task
+   - Read source files to understand current implementation
+   - Trace the affected code path
+4. Identify implementation approach:
+   - Where should changes be made?
+   - What constraints/edge cases need handling?
+   - Any related tasks or tech debt?
+5. Propose solution:
+   - Clear explanation of needed changes
+   - Specific files to modify
+   - Potential risks/trade-offs
+   - Test cases to verify
+
+Guidelines:
+- Be thorough but focused - investigate deeply without getting sidetracked
+- Ask clarifying questions if requirements are unclear
+- If multiple solutions exist, explain trade-offs
+- Reference specific file paths and line numbers`
 
 /** Default prompt for PR content generation */
 export const DEFAULT_PR_CONTENT_PROMPT = `<task>Generate a pull request title and description</task>
@@ -375,6 +407,7 @@ Now provide a brief summary with exactly two fields:
 export const DEFAULT_MAGIC_PROMPTS: MagicPrompts = {
   investigate_issue: null,
   investigate_pr: null,
+  investigate_clickup_task: null,
   pr_content: null,
   commit_message: null,
   code_review: null,

@@ -720,7 +720,7 @@ export function NewWorktreeModal() {
       }
       setCreatingFromTaskId(task.id)
       try {
-        useUIStore.getState().setPendingInvestigateType('issue')
+        useUIStore.getState().setPendingInvestigateType('clickup-task')
         if (background)
           useUIStore.getState().incrementPendingBackgroundCreations()
 
@@ -1040,6 +1040,8 @@ export function NewWorktreeModal() {
           }}
           type="clickup-task"
           taskId={previewItem.taskId}
+          onSelectTask={handleSelectClickUpTask}
+          onInvestigateTask={handleSelectClickUpTaskAndInvestigate}
         />
       )}
       {previewItem &&

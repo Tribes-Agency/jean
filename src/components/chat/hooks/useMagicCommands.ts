@@ -21,7 +21,7 @@ interface MagicCommandHandlers {
   handleMerge: () => void
   handleResolveConflicts: () => void
   handleInvestigateWorkflowRun: (detail: WorkflowRunDetail) => void
-  handleInvestigate: (type: 'issue' | 'pr') => void
+  handleInvestigate: (type: 'issue' | 'pr' | 'clickup-task') => void
 }
 
 interface UseMagicCommandsOptions extends MagicCommandHandlers {

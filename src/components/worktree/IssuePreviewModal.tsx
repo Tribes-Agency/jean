@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import {
   CircleDot,
   GitPullRequest,
@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Clock,
   ExternalLink,
+  ArrowLeft,
 } from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import {
@@ -34,6 +35,7 @@ import type {
   GitHubReview,
   GitHubLabel,
 } from '@/types/github'
+import type { ClickUpTask } from '@/types/clickup'
 
 type IssuePreviewModalProps =
   | {
@@ -48,6 +50,8 @@ type IssuePreviewModalProps =
       onOpenChange: (open: boolean) => void
       type: 'clickup-task'
       taskId: string
+      onSelectTask?: (task: ClickUpTask, background?: boolean) => void
+      onInvestigateTask?: (task: ClickUpTask, background?: boolean) => void
     }
 
 function formatDate(dateStr: string): string {
@@ -342,6 +346,8 @@ export function IssuePreviewModal(props: IssuePreviewModalProps) {
         open={open}
         onOpenChange={onOpenChange}
         taskId={props.taskId}
+        onSelectTask={props.onSelectTask}
+        onInvestigateTask={props.onInvestigateTask}
       />
     )
   }
@@ -360,30 +366,62 @@ export function IssuePreviewModal(props: IssuePreviewModalProps) {
 function ClickUpPreviewModalContent({
   open,
   onOpenChange,
-  taskId,
+  taskId: initialTaskId,
+  onSelectTask,
+  onInvestigateTask,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   taskId: string
+  onSelectTask?: (task: ClickUpTask, background?: boolean) => void
+  onInvestigateTask?: (task: ClickUpTask, background?: boolean) => void
 }) {
-  const { data: task } = useClickUpTask(taskId)
+  const [taskStack, setTaskStack] = useState<string[]>([initialTaskId])
+  const currentTaskId = taskStack[taskStack.length - 1] ?? initialTaskId
+  const canGoBack = taskStack.length > 1
+
+  const { data: task } = useClickUpTask(currentTaskId)
+
+  const handleNavigateToTask = useCallback((id: string) => {
+    setTaskStack(prev => [...prev, id])
+  }, [])
+
+  const handleGoBack = useCallback(() => {
+    setTaskStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev))
+  }, [])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!w-screen !max-w-screen sm:!w-[90vw] sm:!max-w-4xl sm:!h-[85vh] sm:!max-h-[85vh] sm:!rounded-lg flex flex-col overflow-hidden z-[80] [&>[data-slot=dialog-close]]:top-6">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>
-            <ClickUpTaskPreviewHeader
-              taskId={taskId}
-              customId={task?.customId}
-              url={task?.url}
-            />
+            <span className="flex items-center gap-2">
+              {canGoBack && (
+                <button
+                  onClick={handleGoBack}
+                  className="p-1 rounded hover:bg-accent transition-colors"
+                  title="Back to parent task"
+                >
+                  <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+                </button>
+              )}
+              <ClickUpTaskPreviewHeader
+                taskId={currentTaskId}
+                customId={task?.customId}
+                url={task?.url}
+              />
+            </span>
           </DialogTitle>
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0">
           <div className="select-text space-y-4 pr-4 pb-4">
-            <ClickUpTaskPreview taskId={taskId} />
+            <ClickUpTaskPreview
+              taskId={currentTaskId}
+              onNavigateToTask={handleNavigateToTask}
+              onSelectTask={onSelectTask}
+              onInvestigateTask={onInvestigateTask}
+            />
           </div>
         </ScrollArea>
       </DialogContent>

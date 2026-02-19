@@ -47,6 +47,8 @@ export interface ClickUpTaskDetail {
   dateCreated: string
   url: string
   comments: ClickUpComment[]
+  /** Subtasks of this task */
+  subtasks: ClickUpTask[]
 }
 
 export interface ClickUpWorkspace {
@@ -77,6 +79,12 @@ export interface ClickUpSpaceHierarchy {
   spaceId: string
   folders: ClickUpFolder[]
   folderlessLists: ClickUpList[]
+}
+
+export interface ClickUpSharedHierarchy {
+  tasks: ClickUpTask[]
+  lists: ClickUpList[]
+  folders: ClickUpFolder[]
 }
 
 export interface ClickUpAuthStatus {

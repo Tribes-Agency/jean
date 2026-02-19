@@ -7,6 +7,7 @@ import {
   useClickUpUser,
   useClickUpMyTasks,
   useClickUpListTasks,
+  useClickUpSharedHierarchy,
   filterClickUpTasks,
 } from './clickup'
 import type { ClickUpTask } from '@/types/clickup'
@@ -62,6 +63,14 @@ describe('clickupQueryKeys', () => {
       'myTasks',
       'ws456',
       true,
+    ])
+  })
+
+  it('creates correct sharedHierarchy query key', () => {
+    expect(clickupQueryKeys.sharedHierarchy('ws123')).toEqual([
+      'clickup',
+      'shared-hierarchy',
+      'ws123',
     ])
   })
 })
@@ -193,6 +202,43 @@ describe('useClickUpListTasks', () => {
       page: 0,
       subtasks: true,
     })
+  })
+})
+
+describe('useClickUpSharedHierarchy', () => {
+  let queryClient: QueryClient
+
+  beforeEach(() => {
+    queryClient = createTestQueryClient()
+    mockInvoke.mockReset()
+  })
+
+  it('fetches shared hierarchy when workspaceId is provided', async () => {
+    const mockResult = { tasks: [], lists: [], folders: [] }
+    mockInvoke.mockResolvedValueOnce(mockResult)
+
+    const { result } = renderHook(
+      () => useClickUpSharedHierarchy('ws123'),
+      { wrapper: createWrapper(queryClient) }
+    )
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toEqual(mockResult)
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'clickup_get_shared_hierarchy',
+      { workspaceId: 'ws123' }
+    )
+  })
+
+  it('does not fetch when workspaceId is null', async () => {
+    const { result } = renderHook(
+      () => useClickUpSharedHierarchy(null),
+      { wrapper: createWrapper(queryClient) }
+    )
+
+    await new Promise(r => setTimeout(r, 50))
+    expect(result.current.fetchStatus).toBe('idle')
+    expect(mockInvoke).not.toHaveBeenCalled()
   })
 })
 

@@ -31,6 +31,7 @@ pub async fn clickup_get_my_tasks(
         0,
         Some(&[user.id]),
         true,
+        None,
     )
     .await?;
 
@@ -88,17 +89,42 @@ pub async fn clickup_list_spaces(workspace_id: String) -> Result<Vec<ClickUpSpac
     Ok(spaces)
 }
 
-/// List tasks in a workspace, optionally filtered by space.
+/// Get the shared hierarchy (tasks, lists, folders shared with the user).
+#[tauri::command]
+pub async fn clickup_get_shared_hierarchy(
+    workspace_id: String,
+) -> Result<ClickUpSharedHierarchy, String> {
+    log::trace!("Getting ClickUp shared hierarchy for workspace {workspace_id}");
+    let shared = api::get_shared_hierarchy(&workspace_id).await?;
+    log::trace!(
+        "Got shared hierarchy: {} tasks, {} lists, {} folders",
+        shared.tasks.len(),
+        shared.lists.len(),
+        shared.folders.len()
+    );
+    Ok(shared)
+}
+
+/// List tasks in a workspace, optionally filtered by space and/or search text.
 #[tauri::command]
 pub async fn clickup_list_tasks(
     workspace_id: String,
     space_ids: Vec<String>,
     include_closed: bool,
     page: u32,
+    search: Option<String>,
 ) -> Result<ClickUpTaskListResult, String> {
-    log::trace!("Listing ClickUp tasks for workspace {workspace_id}, page {page}");
-    let result =
-        api::list_tasks(&workspace_id, &space_ids, include_closed, page, None, false).await?;
+    log::trace!("Listing ClickUp tasks for workspace {workspace_id}, page {page}, search={search:?}");
+    let result = api::list_tasks(
+        &workspace_id,
+        &space_ids,
+        include_closed,
+        page,
+        None,
+        false,
+        search.as_deref(),
+    )
+    .await?;
     log::trace!(
         "Found {} ClickUp tasks (last_page: {})",
         result.tasks.len(),
@@ -170,23 +196,28 @@ pub async fn clickup_search_task_by_id(
     Ok(result)
 }
 
-/// Get a single task's full detail including comments.
+/// Get a single task's full detail including comments and subtasks.
 #[tauri::command]
 pub async fn clickup_get_task(task_id: String) -> Result<ClickUpTaskDetail, String> {
     log::trace!("Getting ClickUp task {task_id}");
 
-    // Fetch task detail and comments in parallel
-    let (task_result, comments_result) =
-        tokio::join!(api::get_task(&task_id), api::get_task_comments(&task_id));
+    // Fetch task detail, comments, and subtasks in parallel
+    let (task_result, comments_result, subtasks_result) = tokio::join!(
+        api::get_task(&task_id),
+        api::get_task_comments(&task_id),
+        api::get_task_subtasks(&task_id)
+    );
 
     let mut task = task_result?;
     let comments = comments_result?;
     task.comments = comments;
+    task.subtasks = subtasks_result.unwrap_or_default();
 
     log::trace!(
-        "Got ClickUp task {} with {} comments",
+        "Got ClickUp task {} with {} comments, {} subtasks",
         task_id,
-        task.comments.len()
+        task.comments.len(),
+        task.subtasks.len()
     );
     Ok(task)
 }
@@ -327,7 +358,7 @@ pub async fn load_clickup_task_context(
     let (task_result, comments_result, subtasks_result) = tokio::join!(
         api::get_task(&task_id),
         api::get_task_comments(&task_id),
-        api::list_tasks(&workspace_id, &[], true, 0, None, true)
+        api::list_tasks(&workspace_id, &[], true, 0, None, true, None)
     );
 
     let mut task = task_result?;

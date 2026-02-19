@@ -72,7 +72,7 @@ interface UIState {
   /** When non-null, shows the update available modal */
   updateModalVersion: string | null
   /** Pending auto-investigate type — ChatWindow picks this up when it mounts */
-  pendingInvestigateType: 'issue' | 'pr' | null
+  pendingInvestigateType: 'issue' | 'pr' | 'clickup-task' | null
   /** Last-selected issue source in New Worktree modal */
   issueSource: 'github' | 'clickup'
 
@@ -134,8 +134,8 @@ interface UIState {
   setUIStateInitialized: (initialized: boolean) => void
   setPendingUpdateVersion: (version: string | null) => void
   setUpdateModalVersion: (version: string | null) => void
-  setPendingInvestigateType: (type: 'issue' | 'pr' | null) => void
-  consumePendingInvestigateType: () => 'issue' | 'pr' | null
+  setPendingInvestigateType: (type: 'issue' | 'pr' | 'clickup-task' | null) => void
+  consumePendingInvestigateType: () => 'issue' | 'pr' | 'clickup-task' | null
   setIssueSource: (source: 'github' | 'clickup') => void
 }
 
@@ -535,7 +535,7 @@ export const useUIStore = create<UIState>()(
           undefined,
           'setUpdateModalVersion'
         ),
-      setPendingInvestigateType: (type: 'issue' | 'pr' | null) =>
+      setPendingInvestigateType: (type: 'issue' | 'pr' | 'clickup-task' | null) =>
         set(
           { pendingInvestigateType: type },
           undefined,

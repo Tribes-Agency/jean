@@ -22,6 +22,7 @@ import type { ClickUpTask, ClickUpTaskListResult } from '@/types/clickup'
 import { ClickUpTaskItem } from './ClickUpTaskItem'
 import { CollapsibleTreeView } from './CollapsibleTreeView'
 import { MyTasksSection } from './MyTasksSection'
+import { SharedSection } from './SharedSection'
 
 interface ClickUpTasksPanelProps {
   selectedIndex: number
@@ -70,16 +71,19 @@ export function ClickUpTasksPanel({
       'workspace-tasks',
       workspaceId,
       includeClosed,
+      searchQuery.trim(),
     ],
     queryFn: async (): Promise<ClickUpTaskListResult> => {
       if (!isTauri() || !workspaceId) {
         return { tasks: [], lastPage: true }
       }
+      const trimmed = searchQuery.trim()
       return invoke<ClickUpTaskListResult>('clickup_list_tasks', {
         workspaceId,
         spaceIds: [],
         includeClosed,
         page: 0,
+        search: trimmed || null,
       })
     },
     enabled: isSearching && !!workspaceId,
@@ -226,6 +230,14 @@ export function ClickUpTasksPanel({
           /* Browse mode — My Tasks + Collapsible Tree */
           <ScrollArea className="flex-1">
             <MyTasksSection
+              workspaceId={workspaceId}
+              includeClosed={includeClosed}
+              onSelectTask={onSelectTask}
+              onInvestigateTask={onInvestigateTask}
+              onPreviewTask={onPreviewTask}
+              creatingFromTaskId={creatingFromTaskId}
+            />
+            <SharedSection
               workspaceId={workspaceId}
               includeClosed={includeClosed}
               onSelectTask={onSelectTask}

@@ -180,6 +180,54 @@ pub async fn list_spaces(workspace_id: &str) -> Result<Vec<ClickUpSpace>, ClickU
     Ok(data.spaces)
 }
 
+/// Get the shared hierarchy for a workspace.
+/// Returns tasks, lists, and folders that have been shared with the authenticated user.
+/// ClickUp API: GET /team/{team_id}/shared
+pub async fn get_shared_hierarchy(
+    workspace_id: &str,
+) -> Result<ClickUpSharedHierarchy, ClickUpApiError> {
+    let token = require_token()?;
+    let client = Client::new();
+
+    let response = client
+        .get(format!("{BASE_URL}/team/{workspace_id}/shared"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| {
+            ClickUpApiError::RequestError(format!("Failed to fetch shared hierarchy: {e}"))
+        })?;
+
+    let response = check_response(response).await?;
+
+    let body = response.text().await.map_err(|e| {
+        ClickUpApiError::RequestError(format!("Failed to read shared hierarchy response: {e}"))
+    })?;
+
+    log::debug!(
+        "ClickUp shared hierarchy response (first 500 chars): {}",
+        &body[..body.len().min(500)]
+    );
+
+    // The API wraps the response in a "shared" key.
+    // Try unwrapping first; fall back to direct parse for resilience.
+    #[derive(serde::Deserialize)]
+    struct SharedResponse {
+        shared: ClickUpSharedHierarchy,
+    }
+
+    let data = serde_json::from_str::<SharedResponse>(&body)
+        .map(|r| r.shared)
+        .or_else(|_| serde_json::from_str::<ClickUpSharedHierarchy>(&body))
+        .map_err(|e| {
+            ClickUpApiError::RequestError(format!(
+                "Failed to parse shared hierarchy: {e} — body: {body}"
+            ))
+        })?;
+
+    Ok(data)
+}
+
 /// List tasks across a workspace, optionally filtered by space IDs.
 ///
 /// Uses the "filtered team tasks" endpoint which searches across all lists.
@@ -191,6 +239,7 @@ pub async fn list_tasks(
     page: u32,
     assignees: Option<&[u64]>,
     subtasks: bool,
+    search: Option<&str>,
 ) -> Result<ClickUpTaskListResult, ClickUpApiError> {
     let token = require_token()?;
     let client = Client::new();
@@ -213,6 +262,23 @@ pub async fn list_tasks(
 
     if subtasks {
         url.push_str("&subtasks=true");
+    }
+
+    if let Some(q) = search {
+        if !q.is_empty() {
+            // Percent-encode the search query for URL safety
+            let encoded: String = q
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~' {
+                        c.to_string()
+                    } else {
+                        format!("%{:02X}", c as u32)
+                    }
+                })
+                .collect();
+            url.push_str(&format!("&search={encoded}"));
+        }
     }
 
     // Order by most recently updated
@@ -475,6 +541,45 @@ pub async fn get_task(task_id: &str) -> Result<ClickUpTaskDetail, ClickUpApiErro
     }
 
     Ok(task)
+}
+
+/// Get subtasks of a task using the `include_subtasks` parameter.
+///
+/// ClickUp doesn't have a dedicated subtasks endpoint, so we re-fetch the task
+/// with `include_subtasks=true` and extract the `subtasks` array.
+pub async fn get_task_subtasks(task_id: &str) -> Result<Vec<ClickUpTask>, ClickUpApiError> {
+    let token = require_token()?;
+    let client = Client::new();
+
+    let response = client
+        .get(format!(
+            "{BASE_URL}/task/{task_id}?include_subtasks=true"
+        ))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| {
+            ClickUpApiError::RequestError(format!(
+                "Failed to fetch subtasks for task {task_id}: {e}"
+            ))
+        })?;
+
+    let response = check_response(response).await?;
+
+    // The response includes a "subtasks" array when include_subtasks=true
+    #[derive(serde::Deserialize)]
+    struct TaskWithSubtasks {
+        #[serde(default)]
+        subtasks: Vec<ClickUpTask>,
+    }
+
+    let data: TaskWithSubtasks = response.json().await.map_err(|e| {
+        ClickUpApiError::RequestError(format!(
+            "Failed to parse subtasks for task {task_id}: {e}"
+        ))
+    })?;
+
+    Ok(data.subtasks)
 }
 
 /// Get comments for a task.
@@ -754,6 +859,85 @@ mod tests {
         assert_eq!(task.id, "task789");
         assert_eq!(task.parent, None);
         assert!(task.assignees.is_empty());
+    }
+
+    #[test]
+    fn test_shared_hierarchy_url_construction() {
+        let url = format!("{BASE_URL}/team/{}/shared", "ws123");
+        assert_eq!(
+            url,
+            "https://api.clickup.com/api/v2/team/ws123/shared"
+        );
+    }
+
+    #[test]
+    fn test_shared_hierarchy_deserialization() {
+        let json = r##"{
+            "tasks": [
+                {
+                    "id": "shared1",
+                    "name": "Shared task",
+                    "status": {"status": "open", "color": "#d3d3d3", "type": "open"},
+                    "date_created": "1700000000000",
+                    "url": "https://app.clickup.com/t/shared1"
+                }
+            ],
+            "lists": [
+                {
+                    "id": "list1",
+                    "name": "Shared list",
+                    "task_count": 5,
+                    "archived": false
+                }
+            ],
+            "folders": [
+                {
+                    "id": "folder1",
+                    "name": "Shared folder",
+                    "task_count": "10",
+                    "lists": [
+                        {
+                            "id": "list2",
+                            "name": "List in shared folder",
+                            "task_count": 3,
+                            "archived": false
+                        }
+                    ]
+                }
+            ]
+        }"##;
+
+        let shared: ClickUpSharedHierarchy = serde_json::from_str(json).unwrap();
+        assert_eq!(shared.tasks.len(), 1);
+        assert_eq!(shared.tasks[0].id, "shared1");
+        assert_eq!(shared.tasks[0].name, "Shared task");
+        assert_eq!(shared.lists.len(), 1);
+        assert_eq!(shared.lists[0].id, "list1");
+        assert_eq!(shared.lists[0].name, "Shared list");
+        assert_eq!(shared.lists[0].task_count, Some("5".to_string()));
+        assert_eq!(shared.folders.len(), 1);
+        assert_eq!(shared.folders[0].id, "folder1");
+        assert_eq!(shared.folders[0].name, "Shared folder");
+        assert_eq!(shared.folders[0].lists.len(), 1);
+        assert_eq!(shared.folders[0].lists[0].id, "list2");
+    }
+
+    #[test]
+    fn test_shared_hierarchy_deserialization_empty() {
+        let json = r#"{"tasks": [], "lists": [], "folders": []}"#;
+        let shared: ClickUpSharedHierarchy = serde_json::from_str(json).unwrap();
+        assert!(shared.tasks.is_empty());
+        assert!(shared.lists.is_empty());
+        assert!(shared.folders.is_empty());
+    }
+
+    #[test]
+    fn test_shared_hierarchy_deserialization_missing_fields() {
+        let json = r#"{}"#;
+        let shared: ClickUpSharedHierarchy = serde_json::from_str(json).unwrap();
+        assert!(shared.tasks.is_empty());
+        assert!(shared.lists.is_empty());
+        assert!(shared.folders.is_empty());
     }
 
     #[test]

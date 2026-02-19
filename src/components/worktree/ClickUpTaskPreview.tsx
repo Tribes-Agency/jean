@@ -1,11 +1,27 @@
-import { Loader2, MessageSquare, ExternalLink, AlertCircle } from 'lucide-react'
+import {
+  Loader2,
+  MessageSquare,
+  ExternalLink,
+  AlertCircle,
+  ListTree,
+  Eye,
+  GitBranch,
+  Wand2,
+} from 'lucide-react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Markdown } from '@/components/ui/markdown'
 import { useClickUpTask } from '@/services/clickup'
-import type { ClickUpTaskDetail, ClickUpComment } from '@/types/clickup'
+import type {
+  ClickUpTaskDetail,
+  ClickUpTask,
+  ClickUpComment,
+} from '@/types/clickup'
 
 interface ClickUpTaskPreviewProps {
   taskId: string
+  onNavigateToTask?: (taskId: string) => void
+  onSelectTask?: (task: ClickUpTask, background?: boolean) => void
+  onInvestigateTask?: (task: ClickUpTask, background?: boolean) => void
 }
 
 function formatDate(unixMs: string): string {
@@ -40,7 +56,81 @@ function CommentItem({ comment }: { comment: ClickUpComment }) {
   )
 }
 
-function TaskContent({ detail }: { detail: ClickUpTaskDetail }) {
+function SubtaskItem({
+  subtask,
+  onNavigate,
+  onSelect,
+  onInvestigate,
+}: {
+  subtask: ClickUpTask
+  onNavigate?: (taskId: string) => void
+  onSelect?: (task: ClickUpTask, background?: boolean) => void
+  onInvestigate?: (task: ClickUpTask, background?: boolean) => void
+}) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2 group">
+      <span
+        className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+        style={{ backgroundColor: subtask.status.color || '#94a3b8' }}
+        title={subtask.status.status}
+      />
+      <span className="text-sm truncate flex-1">{subtask.name}</span>
+      {subtask.customId && (
+        <span className="text-xs text-muted-foreground font-mono flex-shrink-0">
+          {subtask.customId}
+        </span>
+      )}
+      <span
+        className="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0"
+        style={{
+          backgroundColor: `${subtask.status.color}20`,
+          color: subtask.status.color,
+        }}
+      >
+        {subtask.status.status}
+      </span>
+      {onNavigate && (
+        <button
+          onClick={() => onNavigate(subtask.id)}
+          className="p-1 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+          title="View subtask details"
+        >
+          <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      )}
+      {onSelect && (
+        <button
+          onClick={e => onSelect(subtask, e.metaKey)}
+          className="p-1 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+          title="Create worktree from subtask"
+        >
+          <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      )}
+      {onInvestigate && (
+        <button
+          onClick={e => onInvestigate(subtask, e.metaKey)}
+          className="inline-flex items-center gap-0.5 rounded bg-black px-1 py-0.5 text-[10px] text-white transition-colors hover:bg-black/80 dark:bg-yellow-500/20 dark:text-yellow-400 dark:hover:bg-yellow-500/30 dark:hover:text-yellow-300 opacity-0 group-hover:opacity-100 flex-shrink-0"
+          title="Create worktree and investigate subtask"
+        >
+          <Wand2 className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TaskContent({
+  detail,
+  onNavigateToTask,
+  onSelectTask,
+  onInvestigateTask,
+}: {
+  detail: ClickUpTaskDetail
+  onNavigateToTask?: (taskId: string) => void
+  onSelectTask?: (task: ClickUpTask, background?: boolean) => void
+  onInvestigateTask?: (task: ClickUpTask, background?: boolean) => void
+}) {
   const description = detail.markdownDescription || detail.description
 
   return (
@@ -92,6 +182,30 @@ function TaskContent({ detail }: { detail: ClickUpTaskDetail }) {
         </div>
       </div>
 
+      {/* Subtasks */}
+      {detail.subtasks.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ListTree className="h-4 w-4" />
+            <span>
+              {detail.subtasks.length} subtask
+              {detail.subtasks.length !== 1 && 's'}
+            </span>
+          </div>
+          <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+            {detail.subtasks.map(subtask => (
+              <SubtaskItem
+                key={subtask.id}
+                subtask={subtask}
+                onNavigate={onNavigateToTask}
+                onSelect={onSelectTask}
+                onInvestigate={onInvestigateTask}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Comments */}
       {detail.comments.length > 0 && (
         <div className="space-y-3">
@@ -111,7 +225,12 @@ function TaskContent({ detail }: { detail: ClickUpTaskDetail }) {
   )
 }
 
-export function ClickUpTaskPreview({ taskId }: ClickUpTaskPreviewProps) {
+export function ClickUpTaskPreview({
+  taskId,
+  onNavigateToTask,
+  onSelectTask,
+  onInvestigateTask,
+}: ClickUpTaskPreviewProps) {
   const { data: task, isLoading, error } = useClickUpTask(taskId)
 
   if (isLoading) {
@@ -134,7 +253,14 @@ export function ClickUpTaskPreview({ taskId }: ClickUpTaskPreviewProps) {
 
   if (!task) return null
 
-  return <TaskContent detail={task} />
+  return (
+    <TaskContent
+      detail={task}
+      onNavigateToTask={onNavigateToTask}
+      onSelectTask={onSelectTask}
+      onInvestigateTask={onInvestigateTask}
+    />
+  )
 }
 
 export function ClickUpTaskPreviewHeader({

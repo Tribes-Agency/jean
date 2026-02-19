@@ -430,6 +430,8 @@ pub struct MagicPrompts {
     #[serde(default)]
     pub investigate_pr: Option<String>,
     #[serde(default)]
+    pub investigate_clickup_task: Option<String>,
+    #[serde(default)]
     pub pr_content: Option<String>,
     #[serde(default)]
     pub commit_message: Option<String>,
@@ -2189,6 +2191,7 @@ pub fn run() {
             clickup::commands::clickup_get_my_tasks,
             clickup::commands::clickup_list_workspaces,
             clickup::commands::clickup_list_spaces,
+            clickup::commands::clickup_get_shared_hierarchy,
             clickup::commands::clickup_list_tasks,
             clickup::commands::clickup_get_space_hierarchy,
             clickup::commands::clickup_list_tasks_in_list,

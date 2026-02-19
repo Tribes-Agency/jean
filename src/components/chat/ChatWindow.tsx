@@ -59,6 +59,7 @@ import { getLabelTextColor } from '@/lib/label-colors'
 import {
   DEFAULT_INVESTIGATE_ISSUE_PROMPT,
   DEFAULT_INVESTIGATE_PR_PROMPT,
+  DEFAULT_INVESTIGATE_CLICKUP_TASK_PROMPT,
   DEFAULT_INVESTIGATE_WORKFLOW_RUN_PROMPT,
   DEFAULT_PARALLEL_EXECUTION_PROMPT,
   PREDEFINED_CLI_PROFILES,
@@ -1939,15 +1940,21 @@ export function ChatWindow({
 
   // Handle investigate workflow run - sends investigation prompt for a failed GitHub Actions run
   const handleInvestigate = useCallback(
-    async (type: 'issue' | 'pr') => {
+    async (type: 'issue' | 'pr' | 'clickup-task') => {
       if (!activeSessionId || !activeWorktreeId || !activeWorktreePath) return
 
       const modelKey =
-        type === 'issue' ? 'investigate_issue_model' : 'investigate_pr_model'
+        type === 'clickup-task'
+          ? 'investigate_issue_model'
+          : type === 'issue'
+            ? 'investigate_issue_model'
+            : 'investigate_pr_model'
       const providerKey =
-        type === 'issue'
+        type === 'clickup-task'
           ? 'investigate_issue_provider'
-          : 'investigate_pr_provider'
+          : type === 'issue'
+            ? 'investigate_issue_provider'
+            : 'investigate_pr_provider'
       const investigateModel =
         preferences?.magic_prompt_models?.[modelKey] ?? selectedModelRef.current
       const investigateProvider = resolveMagicPromptProvider(
@@ -1959,8 +1966,38 @@ export function ChatWindow({
         resolveCustomProfile(investigateModel, investigateProvider)
 
       let prompt: string
+      let displayMessage: string
 
-      if (type === 'issue') {
+      if (type === 'clickup-task') {
+        // ClickUp task investigation — fetch loaded ClickUp task contexts
+        const contexts = await queryClient.fetchQuery({
+          queryKey: ['investigate-contexts', 'clickup-task', activeWorktreeId],
+          queryFn: () =>
+            invoke<{ id: string; name: string; customId: string | null }[]>(
+              'list_loaded_clickup_task_contexts',
+              {
+                sessionId: activeWorktreeId,
+                worktreeId: activeWorktreeId,
+              }
+            ),
+          staleTime: 0,
+        })
+        const taskList = contexts ?? []
+        const refs = taskList
+          .map(c => c.customId || c.id.slice(0, 8))
+          .join(', ')
+        const word = taskList.length === 1 ? 'task' : 'tasks'
+        const customPrompt =
+          preferences?.magic_prompts?.investigate_clickup_task
+        const template =
+          customPrompt && customPrompt.trim()
+            ? customPrompt
+            : DEFAULT_INVESTIGATE_CLICKUP_TASK_PROMPT
+        prompt = template
+          .replace(/\{taskWord\}/g, word)
+          .replace(/\{taskRefs\}/g, refs)
+        displayMessage = `Investigate ClickUp ${word} ${refs}`
+      } else if (type === 'issue') {
         // Query by worktree ID — during auto-investigate, contexts are registered
         // under worktree ID (not session ID) by the backend create_worktree command
         const contexts = await queryClient.fetchQuery({
@@ -1981,6 +2018,7 @@ export function ChatWindow({
         prompt = template
           .replace(/\{issueWord\}/g, word)
           .replace(/\{issueRefs\}/g, refs)
+        displayMessage = `Investigate GitHub ${word} ${refs}`
       } else {
         const contexts = await queryClient.fetchQuery({
           queryKey: ['investigate-contexts', 'pr', activeWorktreeId],
@@ -2000,6 +2038,7 @@ export function ChatWindow({
         prompt = template
           .replace(/\{prWord\}/g, word)
           .replace(/\{prRefs\}/g, refs)
+        displayMessage = `Investigate GitHub ${word} ${refs}`
       }
 
       const {
@@ -2011,7 +2050,7 @@ export function ChatWindow({
         setExecutingMode,
       } = useChatStore.getState()
 
-      setLastSentMessage(activeSessionId, prompt)
+      setLastSentMessage(activeSessionId, displayMessage)
       setError(activeSessionId, null)
       addSendingSession(activeSessionId)
       setSelectedModel(activeSessionId, investigateModel)
@@ -2070,6 +2109,7 @@ export function ChatWindow({
       queryClient,
       preferences?.magic_prompts?.investigate_issue,
       preferences?.magic_prompts?.investigate_pr,
+      preferences?.magic_prompts?.investigate_clickup_task,
       preferences?.default_provider,
       preferences?.parallel_execution_prompt_enabled,
       preferences?.magic_prompts?.parallel_execution,

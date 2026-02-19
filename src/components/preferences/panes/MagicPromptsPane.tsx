@@ -16,6 +16,7 @@ import { usePreferences, useSavePreferences } from '@/services/preferences'
 import {
   DEFAULT_INVESTIGATE_ISSUE_PROMPT,
   DEFAULT_INVESTIGATE_PR_PROMPT,
+  DEFAULT_INVESTIGATE_CLICKUP_TASK_PROMPT,
   DEFAULT_PR_CONTENT_PROMPT,
   DEFAULT_COMMIT_MESSAGE_PROMPT,
   DEFAULT_CODE_REVIEW_PROMPT,
@@ -103,6 +104,26 @@ const PROMPT_SECTIONS: PromptSection[] = [
           },
         ],
         defaultValue: DEFAULT_INVESTIGATE_PR_PROMPT,
+        defaultModel: 'opus',
+      },
+      {
+        key: 'investigate_clickup_task',
+        modelKey: 'investigate_issue_model',
+        providerKey: 'investigate_issue_provider',
+        label: 'Investigate ClickUp Task',
+        description:
+          'Prompt for analyzing ClickUp tasks loaded into the context.',
+        variables: [
+          {
+            name: '{taskRefs}',
+            description: 'Task IDs or custom IDs',
+          },
+          {
+            name: '{taskWord}',
+            description: '"task" or "tasks" based on count',
+          },
+        ],
+        defaultValue: DEFAULT_INVESTIGATE_CLICKUP_TASK_PROMPT,
         defaultModel: 'opus',
       },
       {

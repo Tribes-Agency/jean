@@ -90,9 +90,25 @@ export function stripSkillMarkers(content: string): string {
   return content.replace(SKILL_ATTACHMENT_REGEX, '').trim()
 }
 
+/**
+ * Strip XML prompt tags (e.g. <task>, <instructions>, <guidelines>) used by
+ * investigation prompts. These are structural hints for Claude, not user-facing.
+ */
+export function stripPromptXmlTags(content: string): string {
+  // Remove known prompt XML blocks (tag + content + closing tag)
+  return content
+    .replace(
+      /<(task|instructions|guidelines|context)>\s*[\s\S]*?<\/\1>\s*/gi,
+      ''
+    )
+    .trim()
+}
+
 /** Strip all attachment markers from message content */
 export function stripAllMarkers(content: string): string {
-  return stripSkillMarkers(
-    stripFileMentionMarkers(stripTextFileMarkers(stripImageMarkers(content)))
+  return stripPromptXmlTags(
+    stripSkillMarkers(
+      stripFileMentionMarkers(stripTextFileMarkers(stripImageMarkers(content)))
+    )
   )
 }
